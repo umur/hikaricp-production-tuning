@@ -23,6 +23,7 @@ services:
     container_name: hikaricp-demo-pgbouncer
     environment:
       DATABASE_URL: postgres://app:app@hikaricp-demo-postgres:5432/app
+      LISTEN_PORT: 6432
       POOL_MODE: transaction
       MAX_CLIENT_CONN: 2000
       DEFAULT_POOL_SIZE: 20

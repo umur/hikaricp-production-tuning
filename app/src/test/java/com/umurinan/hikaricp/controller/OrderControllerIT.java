@@ -8,10 +8,12 @@ import com.umurinan.hikaricp.repository.OrderRepository;
 import java.math.BigDecimal;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -47,15 +49,26 @@ class OrderControllerIT {
         registry.add("spring.datasource.password", postgres::getPassword);
     }
 
-    @Autowired
-    private TestRestTemplate restTemplate;
+    @LocalServerPort
+    int port;
 
     @Autowired
     private OrderRepository orderRepository;
 
+    private TestRestTemplate restTemplate;
+
+    @BeforeEach
+    void setUp() {
+        restTemplate = new TestRestTemplate();
+    }
+
     @AfterEach
     void cleanUp() {
         orderRepository.deleteAll();
+    }
+
+    private String url(String path) {
+        return "http://localhost:" + port + path;
     }
 
     @Test
@@ -64,7 +77,7 @@ class OrderControllerIT {
                 "buyer@example.com", List.of("a", "b", "c"));
 
         ResponseEntity<OrderResponse> response = restTemplate.postForEntity(
-                "/api/orders", request, OrderResponse.class);
+                url("/api/orders"), request, OrderResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
@@ -81,7 +94,7 @@ class OrderControllerIT {
                 "buyer@example.com", List.of("widget"));
 
         ResponseEntity<OrderResponse> response = restTemplate.postForEntity(
-                "/api/orders/anti-pattern", request, OrderResponse.class);
+                url("/api/orders/anti-pattern"), request, OrderResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
@@ -91,15 +104,15 @@ class OrderControllerIT {
 
     @Test
     void getRecent_returnsAllPlacedNewestFirst() {
-        restTemplate.postForEntity("/api/orders", new PlaceOrderRequest(
+        restTemplate.postForEntity(url("/api/orders"), new PlaceOrderRequest(
                 "first@example.com", List.of("x")), OrderResponse.class);
-        restTemplate.postForEntity("/api/orders", new PlaceOrderRequest(
+        restTemplate.postForEntity(url("/api/orders"), new PlaceOrderRequest(
                 "second@example.com", List.of("x")), OrderResponse.class);
-        restTemplate.postForEntity("/api/orders", new PlaceOrderRequest(
+        restTemplate.postForEntity(url("/api/orders"), new PlaceOrderRequest(
                 "third@example.com", List.of("x")), OrderResponse.class);
 
         ResponseEntity<List<OrderResponse>> response = restTemplate.exchange(
-                "/api/orders/recent",
+                url("/api/orders/recent"),
                 HttpMethod.GET,
                 null,
                 new ParameterizedTypeReference<List<OrderResponse>>() {});
@@ -113,7 +126,7 @@ class OrderControllerIT {
     @Test
     void getRecent_whenEmpty_returns200WithEmptyList() {
         ResponseEntity<List<OrderResponse>> response = restTemplate.exchange(
-                "/api/orders/recent",
+                url("/api/orders/recent"),
                 HttpMethod.GET,
                 null,
                 new ParameterizedTypeReference<List<OrderResponse>>() {});
@@ -129,7 +142,7 @@ class OrderControllerIT {
         HttpEntity<String> entity = new HttpEntity<>("{not json", headers);
 
         ResponseEntity<String> response = restTemplate.exchange(
-                "/api/orders", HttpMethod.POST, entity, String.class);
+                url("/api/orders"), HttpMethod.POST, entity, String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(orderRepository.count()).isZero();
@@ -138,11 +151,11 @@ class OrderControllerIT {
     @Test
     void prometheusEndpoint_exposesHikariMetrics() {
         // Trigger at least one pool acquire so the metrics surface
-        restTemplate.postForEntity("/api/orders", new PlaceOrderRequest(
+        restTemplate.postForEntity(url("/api/orders"), new PlaceOrderRequest(
                 "metrics@example.com", List.of("x")), OrderResponse.class);
 
         ResponseEntity<String> response = restTemplate.getForEntity(
-                "/actuator/prometheus", String.class);
+                url("/actuator/prometheus"), String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).contains("hikaricp_connections_active");
