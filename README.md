@@ -88,14 +88,34 @@ Stop everything: `docker compose down -v`.
 
 ---
 
-## Run the integration test
+## Run the integration tests
 
 ```bash
 cd app
 mvn verify
 ```
 
-`OrderServiceIT` spins up a real PostgreSQL via Testcontainers, sets `maximum-pool-size=4` and 8 concurrent requests against the FIXED endpoint, asserts that mid-flight active connections stay at or below 4 (because pricing runs outside the transaction) and that all 8 calls finish well under 3 seconds. The same test against the anti-pattern endpoint would take roughly 4 seconds and pin all 4 connections.
+Two test classes, both Testcontainers + real PostgreSQL, zero mocks:
+
+- **`OrderServiceIT`**: four tests covering both the fix and the anti-pattern under concurrent load (asserts the fix doesn't pin the pool, the anti-pattern does), price math, and `recent()` ordering.
+- **`OrderControllerIT`**: six HTTP-layer tests covering both POST endpoints, the GET, empty result, malformed JSON, and the `/actuator/prometheus` endpoint exposing HikariCP metrics.
+
+JaCoCo enforces a minimum of **80% line coverage** on `mvn verify`. The build fails if coverage drops below that.
+
+### Docker socket on macOS
+
+Testcontainers expects `/var/run/docker.sock`. Docker Desktop 4.42+ does not create this by default. Either:
+
+- Enable **Settings > Advanced > Allow the default Docker socket to be used** in Docker Desktop and restart it, or
+- Point Testcontainers at the raw socket directly by editing `~/.testcontainers.properties`:
+  ```properties
+  docker.host=unix:///Users/<you>/Library/Containers/com.docker.docker/Data/docker.raw.sock
+  tc.host=localhost
+  api.version=1.43
+  ryuk.disabled=true
+  ```
+
+Linux and CI environments work out of the box.
 
 ---
 
