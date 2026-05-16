@@ -1,0 +1,29 @@
+groups:
+  - name: hikaricp
+    rules:
+      - alert: HikariPoolSaturated
+        expr: hikaricp_connections_pending{pool="app-hikari"} > 0
+        for: 30s
+        labels:
+          severity: page
+        annotations:
+          summary: "HikariCP pool app-hikari has threads waiting for connections"
+          description: "{{ $value }} threads pending for 30s. Likely pool exhaustion or query slowdown."
+
+      - alert: HikariAcquireSlow
+        expr: histogram_quantile(0.99, sum(rate(hikaricp_connections_acquire_seconds_bucket{pool="app-hikari"}[5m])) by (le)) > 0.05
+        for: 2m
+        labels:
+          severity: warn
+        annotations:
+          summary: "HikariCP acquire p99 over 50ms for 2m"
+          description: "p99 acquire latency = {{ $value }}s. Investigate before pending climbs."
+
+      - alert: HikariConnectionTimeouts
+        expr: increase(hikaricp_connections_timeout_total{pool="app-hikari"}[5m]) > 0
+        for: 0s
+        labels:
+          severity: page
+        annotations:
+          summary: "HikariCP returned at least one connection timeout in the last 5m"
+          description: "Acquire timeouts mean callers gave up waiting. Pool is the bottleneck."

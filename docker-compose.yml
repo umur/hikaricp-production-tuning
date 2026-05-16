@@ -1,0 +1,81 @@
+name: hikaricp-demo
+
+services:
+  hikaricp-demo-postgres:
+    image: postgres:17-alpine
+    container_name: hikaricp-demo-postgres
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "app", "-d", "app"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - hikaricp-demo-pgdata:/var/lib/postgresql/data
+
+  hikaricp-demo-pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: hikaricp-demo-pgbouncer
+    environment:
+      DATABASE_URL: postgres://app:app@hikaricp-demo-postgres:5432/app
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 2000
+      DEFAULT_POOL_SIZE: 20
+      AUTH_TYPE: scram-sha-256
+      SERVER_RESET_QUERY: DISCARD ALL
+    ports:
+      - "6432:6432"
+    depends_on:
+      hikaricp-demo-postgres:
+        condition: service_healthy
+
+  hikaricp-demo-app:
+    image: hikaricp-demo/app:dev
+    container_name: hikaricp-demo-app
+    build:
+      context: ./app
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://hikaricp-demo-pgbouncer:6432/app?prepareThreshold=0
+      SPRING_DATASOURCE_USERNAME: app
+      SPRING_DATASOURCE_PASSWORD: app
+      HIKARI_MAX_POOL_SIZE: 10
+      PRICING_DELAY_MS: 2000
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: prometheus,health,info
+    ports:
+      - "8080:8080"
+    depends_on:
+      - hikaricp-demo-pgbouncer
+
+  hikaricp-demo-prometheus:
+    image: prom/prometheus:latest
+    container_name: hikaricp-demo-prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - hikaricp-demo-app
+
+  hikaricp-demo-grafana:
+    image: grafana/grafana:latest
+    container_name: hikaricp-demo-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    ports:
+      - "3000:3000"
+    depends_on:
+      - hikaricp-demo-prometheus
+
+volumes:
+  hikaricp-demo-pgdata:
+    name: hikaricp-demo-pgdata
+
+networks:
+  default:
+    name: hikaricp-demo-net

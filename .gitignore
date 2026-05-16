@@ -1,0 +1,25 @@
+# Maven
+target/
+*.jar
+*.war
+*.class
+
+# IntelliJ / Eclipse
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# k6 results
+results.json
+summary.json
